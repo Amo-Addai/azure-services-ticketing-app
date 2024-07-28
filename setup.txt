@@ -1,0 +1,98 @@
+
+
+MicroServices Ticketing App Project - Microsoft Azure
+
+
+Steps Outline
+
+- Setting up Azure Virtual Network & Machines
+- Adding & Deploying the code to the Virtual Machines
+- Setting up load balancer
+- Scaling out with load balancers
+- Setting up queues and message brokers
+- Scaling out with queues and message brokers
+- Setting up In-memory & Distributed Caches
+- Caching strategies
+
+
+- TODO: Setup - ...
+
+Steps
+
+
+* - Always ensure there no region conflicts or discrepancies
+* - Project name: 'globo-ticket' | Tag 'globo'
+
+
+- Pre-Setup: all in same region: {region}
+    - Resource Group - 'globo-rg'
+    - Network Security Group - 'web-nsg'
+    - Virtual Network with desired IP range - 'web-vn'
+    - 2 Virtual Machines - 'web-vm-1' & 'web-vm-2'
+    - Public IPs (within Network's IP Range) for both - 'web-vm-1-ip' & 'web-vm-2-ip'
+    - Sql Server - 'web-db-vm'
+    - Sql Database running on 'web-db-vm' Sql Server - 'web-db'
+
+
+- Pre-Set up all resources above & their Public urls within the app's config
+(majority settings in appsettings(.Development).json files)
+- Deploy app to both VMs 'web-vm-1' & 'web-vm-2'
+- Ensure app connects to the 'web-db' Sql Database in 'web-db-vm' Sql Server
+
+
+- Go to Azure Load Balancer (or other in-built / 3rd party Load Balancers)
+(
+Load Sharing / Request Dispatching / Traffic Redirection between VMs
+apps should be stateless so all subsequent requests' required data is saved to DB (not in-memory)
+if stateful, subsequent requests will fail if required state data is in previously routed VM by LB
+)
+- Create
+    - set name: 'web-lb'
+    - set region: {region}
+    - default resource group: 'globo-rg', public type, basic SKU
+    - default 'new' Public IP, no IPv6 address
+    - set Public IP address name: 'web-lb-ip'
+    - change IP address assignment from Dynamic to Static - only 1 public IP to be used
+    - Next: Tags > set tag: 'globo'
+    - Review & Create
+- now, search 'web-lb' in resource group & go to details
+- side-nav to Frontend IP configuration & view lb's public IP
+(can map a dns domain name to public IP for more friendly access from the web)
+- side-nav to Backend pools & Add
+    - set name: 'web-lb-bp'
+    - set virtual network: 'web-vn'
+    - default IPv4 version
+    - set associated to: Virtual Machines
+        - Add 'web-vm-1' & 'web-vm-2' VMs (wouldn't need to specify their Public IPs conn's)
+    - dropdown 'web-lb-bp' to confirm backend pool
+- side-nav to Health probes & Add
+(LB will periodically check VMs in BE pool for +ve http responses, to find unhealthy ones)
+    - set name: 'web-lb-hp'
+    - default TCP protocol, Port 80, check Interval 5s, & Unhealthy threshold of 2 consecutive failures
+    - OK
+- side-nav to Load balancing rules & Add
+    - set name: 'web1-lb-1-lbr'
+    - default IPv4 version, Frontend IP address: 'web-lb-ip's IP, & TCP protocol
+    - change both Port & Backend port: from 80 to 443
+    - default Backend pool: 'web-lb-bp' & Health probe: 'web-lb-hp'
+    - default Session persistence: None (Client IP / Protocol / any value setting - only required for stateful apps in VMs)
+    (
+    if not None, LB will send subsequent requests from same Client IP / Protocol to same VM with stateful app that handled the first request
+    a stateful app will require all subsequent requests to be sent to its same VM because it has required state data in-memory
+    )
+    - default Idle timeout: 4 minutes & Disabled Floating IPs
+    OK
+- side-nav back to Overview & Test 'web-lb's Public IP address
+    - will load up the app from any healthy VM from the Backend pool
+
+
+- Now, Testing 'web-lb's Scalability & Availability
+- Setup & deploy app to another Virtual Machine - 'web-vm-3'
+(ensure that new VMs Public url is correctly set within app's config)
+- Scaling out - Go to 'web-lb's Backend pools & add 'web-vm-3'
+(can remove VMs from pool - scaling in; or increase/decrease performance of VMs - scaling up/down)
+- side-nav back to Overview & Test 'web-lb's Public IP address again
+- keep toggling VMs off & on (stopping & re-starting) & testing 'web-lb's Public IP address again
+(availability - health probe checks will notice turned off VMs' non-respondence & will re-route traffic to others)
+
+
